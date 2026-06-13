@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>Gabby's Dollhouse Making</title>
+<style>
+  :root{
+    --pink:#ff5fa8;
+    --pink-deep:#e8418d;
+    --purple:#9b5de5;
+    --teal:#00bcd4;
+    --mint:#5fd6a6;
+    --yellow:#ffd23f;
+    --sky:#6cc6ff;
+    --orange:#ff994d;
+    --cream:#fff6fb;
+    --ink:#4a2c55;
+    --shadow:rgba(123,52,120,.25);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;}
+  body{
+    font-family:"Baloo 2","Comic Sans MS","Trebuchet MS",system-ui,sans-serif;
+    background:linear-gradient(160deg,#ffe3f3 0%,#f3e1ff 50%,#dff6ff 100%);
+    color:var(--ink);
+    user-select:none; -webkit-user-select:none;
+    touch-action:manipulation;
+  }
+  /* ===== App layout ===== */
+  #app{display:flex;flex-direction:column;height:100%;width:100%;}
+  header{
+    display:flex;align-items:center;gap:8px;padding:8px 12px;
+    background:linear-gradient(90deg,var(--pink),var(--purple));
+    color:#fff;box-shadow:0 3px 10px var(--shadow);z-index:30;flex-wrap:wrap;
+  }
+  .logo{font-weight:800;font-size:clamp(16px,3.4vw,26px);letter-spacing:.5px;
+    text-shadow:0 2px 0 rgba(0,0,0,.12);display:flex;align-items:center;gap:6px;white-space:nowrap;}
+  .logo .heart{filter:drop-shadow(0 2px 0 rgba(0,0,0,.15));}
+  .tabs{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;}
+  .tab{
+    border:none;cursor:pointer;font-family:inherit;font-weight:800;
+    font-size:clamp(13px,2.6vw,18px);padding:8px 14px;border-radius:999px;
+    background:rgba(255,255,255,.25);color:#fff;transition:transform .12s, background .15s;
+  }
+  .tab .ico{margin-right:5px;}
+  .tab.active{background:#fff;color:var(--pink-deep);box-shadow:0 3px 0 rgba(0,0,0,.12);}
+  .tab:active{transform:scale(.93);}
+  .iconbtn{
+    border:none;cursor:pointer;width:42px;height:42px;border-radius:50%;
+    background:rgba(255,255,255,.25);color:#fff;font-size:20px;display:grid;place-items:center;
+  }
+  .iconbtn:active{transform:scale(.9);}
+
+  /* ===== Stage ===== */
+  #stageWrap{position:relative;flex:1;overflow:hidden;}
+  #stage{
+    position:absolute;inset:0;touch-action:none;overflow:hidden;
+    background:
+      radial-gradient(circle at 18% 16%, rgba(255,255,255,.7), transparent 9%),
+      radial-gradient(circle at 80% 12%, rgba(255,255,255,.6), transparent 7%),
+      linear-gradient(180deg,#bfeaff 0%, #d9f4ff 52%, #cdeecb 52%, #bfe6b8 100%);
+  }
+  #stage::after{ /* grass texture line */
+    content:"";position:absolute;left:0;right:0;top:52%;height:6px;
+    background:repeating-linear-gradient(90deg,#8fd47a 0 14px,#7ec96a 14px 28px);opacity:.5;
+  }
+  .cloud{position:absolute;font-size:46px;opacity:.85;pointer-events:none;animation:drift 26s linear infinite;}
+  @keyframes drift{from{transform:translateX(-10vw)}to{transform:translateX(110vw)}}
+
+  /* ===== Camera world (everything draggable lives here & gets pan/zoom) ===== */
+  #world{position:absolute;inset:0;transform-origin:0 0;}
+  #world.anim{transition:transform .5s cubic-bezier(.34,1,.4,1);}
+  #layStruct,#layProps{position:absolute;inset:0;pointer-events:none;} /* props paints above struct; let clicks fall through to pieces */
+
+  /* ===== Zoom controls ===== */
+  #zoomctl{position:absolute;left:14px;bottom:14px;display:flex;flex-direction:column;gap:8px;z-index:40;}
+  #zoomctl button{width:48px;height:48px;border-radius:16px;border:none;cursor:pointer;
+    background:rgba(255,255,255,.9);color:var(--pink-deep);font-size:24px;font-weight:800;
+    box-shadow:0 4px 10px var(--shadow);display:grid;place-items:center;}
+  #zoomctl button:active{transform:scale(.9);}
+
+  .piece{position:absolute;pointer-events:auto;touch-action:none;cursor:grab;will-change:transform,left,top;
+    filter:drop-shadow(0 5px 6px rgba(80,30,90,.28));transition:filter .15s;}
+  .piece svg{display:block;pointer-events:none;}
+  .piece.dragging{cursor:grabbing;filter:drop-shadow(0 14px 14px rgba(80,30,90,.4));z-index:99;}
+  .piece.selected{outline:3px dashed rgba(255,95,168,.9);outline-offset:4px;border-radius:14px;}
+  .piece.walk{animation:walk .5s ease-in-out infinite;}
+  @keyframes walk{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
+
+  /* ===== Selected-item mini toolbar ===== */
+  #itemTools{position:absolute;display:none;gap:6px;z-index:120;}
+  #itemTools button{width:40px;height:40px;border-radius:50%;border:3px solid #fff;
+    background:var(--purple);color:#fff;font-size:18px;cursor:pointer;box-shadow:0 3px 6px var(--shadow);}
+  #itemTools button.del{background:var(--pink-deep);}
+  #itemTools button:active{transform:scale(.9);}
+
+  /* ===== Trash ===== */
+  #trash{position:absolute;right:14px;bottom:14px;width:64px;height:64px;border-radius:20px;
+    background:rgba(255,255,255,.85);display:grid;place-items:center;font-size:30px;z-index:40;
+    box-shadow:0 4px 10px var(--shadow);transition:transform .15s, background .15s;border:3px dashed var(--pink);}
+  #trash.hot{transform:scale(1.25) rotate(-6deg);background:#ffd0e4;}
+
+  /* ===== Tray ===== */
+  #tray{background:rgba(255,255,255,.72);backdrop-filter:blur(6px);
+    box-shadow:0 -4px 14px var(--shadow);padding:8px 10px 10px;z-index:20;}
+  .trayLabel{font-weight:800;font-size:13px;color:var(--pink-deep);margin:0 4px 4px;text-transform:uppercase;letter-spacing:.5px;}
+  .swatches{display:flex;gap:8px;overflow-x:auto;padding:2px 4px 8px;}
+  .swatch{flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:3px solid #fff;cursor:pointer;
+    box-shadow:0 2px 5px var(--shadow);transition:transform .12s;}
+  .swatch.active{transform:scale(1.18);outline:3px solid var(--ink);}
+  .stamps{display:flex;gap:10px;overflow-x:auto;padding:4px;scroll-snap-type:x proximity;}
+  .stamp{flex:0 0 auto;width:84px;height:84px;border-radius:18px;background:#fff;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    box-shadow:0 3px 7px var(--shadow);transition:transform .12s;scroll-snap-align:start;padding:4px;}
+  .stamp:active{transform:scale(.9) rotate(-3deg);}
+  .stamp svg{width:54px;height:48px;}
+  .stamp .nm{font-size:11px;font-weight:700;color:var(--ink);}
+
+  /* ===== Intro overlay ===== */
+  #intro{position:absolute;inset:0;z-index:200;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;gap:14px;padding:20px;
+    background:linear-gradient(160deg,#ffd9ee,#e9d4ff 60%,#cdeeff);}
+  #intro h1{font-size:clamp(28px,7vw,60px);margin:0;color:var(--pink-deep);
+    text-shadow:0 3px 0 #fff,0 6px 0 rgba(155,93,229,.3);line-height:1.05;}
+  #intro p{margin:0;font-size:clamp(15px,3.5vw,22px);font-weight:700;color:var(--purple);}
+  .introCats{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:560px;}
+  .introCats svg{width:74px;height:90px;animation:bob 2s ease-in-out infinite;}
+  .introCats svg:nth-child(2){animation-delay:.2s}
+  .introCats svg:nth-child(3){animation-delay:.4s}
+  .introCats svg:nth-child(4){animation-delay:.6s}
+  .introCats svg:nth-child(5){animation-delay:.8s}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  .bigBtn{border:none;cursor:pointer;font-family:inherit;font-weight:800;
+    font-size:clamp(18px,4vw,26px);padding:14px 34px;border-radius:999px;color:#fff;
+    background:linear-gradient(90deg,var(--pink),var(--purple));box-shadow:0 6px 0 #b84a86, 0 10px 16px var(--shadow);}
+  .bigBtn:active{transform:translateY(4px);box-shadow:0 2px 0 #b84a86,0 5px 10px var(--shadow);}
+
+  /* ===== Toast / hint ===== */
+  #hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:50;
+    background:rgba(255,255,255,.92);color:var(--ink);font-weight:700;padding:8px 16px;border-radius:999px;
+    box-shadow:0 3px 8px var(--shadow);font-size:14px;pointer-events:none;transition:opacity .4s;max-width:90%;}
+
+  .sparkle{position:absolute;pointer-events:none;font-size:22px;z-index:150;animation:spark .7s ease-out forwards;}
+  @keyframes spark{0%{transform:scale(.2) rotate(0);opacity:1}100%{transform:scale(1.6) rotate(60deg) translateY(-30px);opacity:0}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo"><span class="heart">💖</span> Gabby's Dollhouse Making</div>
+    <div class="tabs">
+      <button class="tab active" data-mode="build"><span class="ico">🏠</span>Build</button>
+      <button class="tab" data-mode="decorate"><span class="ico">🛋️</span>Decorate</button>
+      <button class="tab" data-mode="play"><span class="ico">🐱</span>Play</button>
+    </div>
+    <button class="iconbtn" id="soundBtn" title="Sound">🔊</button>
+    <button class="iconbtn" id="clearBtn" title="Start over">🧹</button>
+  </header>
+
+  <div id="stageWrap">
+    <div id="stage"><div id="world"><div id="layStruct"></div><div id="layProps"></div></div></div>
+    <div id="zoomctl">
+      <button id="zoomIn" title="Zoom in">＋</button>
+      <button id="zoomOut" title="Zoom out">－</button>
+      <button id="zoomFit" title="See whole scene">🔍</button>
+    </div>
+    <div id="itemTools">
+      <button id="growBtn" title="Bigger">➕</button>
+      <button id="shrinkBtn" title="Smaller">➖</button>
+      <button id="flipBtn" title="Flip">🔁</button>
+      <button class="del" id="delBtn" title="Remove">🗑️</button>
+    </div>
+    <div id="trash">🗑️</div>
+    <div id="hint"></div>
+  </div>
+
+  <div id="tray">
+    <div class="trayLabel" id="trayLabel">Build pieces</div>
+    <div class="swatches" id="swatches"></div>
+    <div class="stamps" id="stamps"></div>
+  </div>
+</div>
+
+<div id="intro">
+  <h1>Gabby's<br>Dollhouse Making</h1>
+  <p>Build a kitty dollhouse, decorate it, then play! 🐾</p>
+  <div class="introCats" id="introCats"></div>
+  <button class="bigBtn" id="startBtn">Let's Build! ✨</button>
+</div>
+
+<script>
+/* =========================================================================
+   Gabby's Dollhouse Making — single-file touch game
+   ========================================================================= */
+const stage   = document.getElementById('stage');
+const world   = document.getElementById('world');
+const layStruct=document.getElementById('layStruct');
+const layProps =document.getElementById('layProps');
+const stamps  = document.getElementById('stamps');
+const swatches= document.getElementById('swatches');
+const trash   = document.getElementById('trash');
+const hintEl  = document.getElementById('hint');
+const itemTools=document.getElementById('itemTools');
+
+/* ---------- Color palette (from the design + Gabby brand) ---------- */
+const COLORS = ['#ff5fa8','#e8418d','#9b5de5','#6cc6ff','#00bcd4','#5fd6a6','#ffd23f','#ff994d','#fff0f7','#bdbbe0'];
+
+/* =========================================================================
+   ART — every piece is an SVG string. {C} is replaced by the chosen color.
+   ========================================================================= */
+const ART = {
+  /* ---- Structure ---- */
+  base:(C)=>`<svg viewBox="0 0 240 130" width="240" height="130">
+    <rect x="8" y="14" width="224" height="108" rx="18" fill="${C}" stroke="#fff" stroke-width="6"/>
+    <rect x="98" y="50" width="44" height="72" rx="14" fill="#7a4a2c" stroke="#fff" stroke-width="5"/>
+    <circle cx="132" cy="88" r="4" fill="#ffd23f"/>
+    <rect x="30" y="42" width="40" height="38" rx="8" fill="#dff6ff" stroke="#fff" stroke-width="5"/>
+    <rect x="170" y="42" width="40" height="38" rx="8" fill="#dff6ff" stroke="#fff" stroke-width="5"/>
+  </svg>`,
+
+  room:(C)=>`<svg viewBox="0 0 170 150" width="170" height="150">
+    <rect x="8" y="8" width="154" height="134" rx="16" fill="${C}" stroke="#fff" stroke-width="6"/>
+    <circle cx="85" cy="72" r="42" fill="#fff" opacity=".85"/>
+    <line x1="85" y1="32" x2="85" y2="112" stroke="${C}" stroke-width="6"/>
+    <line x1="45" y1="72" x2="125" y2="72" stroke="${C}" stroke-width="6"/>
+  </svg>`,
+
+  /* ---- Open-front variants: shown in Decorate/Play so you can see inside ---- */
+  base_open:(C)=>`<svg viewBox="0 0 240 130" width="240" height="130">
+    <rect x="8" y="14" width="224" height="108" rx="18" fill="${C}"/>
+    <rect x="20" y="24" width="200" height="88" rx="10" fill="#fff6fb"/>
+    <rect x="20" y="24" width="200" height="88" rx="10" fill="${C}" opacity=".1"/>
+    <rect x="16" y="98" width="208" height="18" rx="6" fill="#e7b27a"/>
+    <rect x="14" y="112" width="212" height="10" rx="5" fill="#c98c52"/>
+    <rect x="96" y="60" width="48" height="56" rx="10" fill="#7a4a2c"/>
+  </svg>`,
+
+  room_open:(C)=>`<svg viewBox="0 0 170 150" width="170" height="150">
+    <rect x="8" y="8" width="154" height="134" rx="16" fill="${C}"/>
+    <rect x="20" y="18" width="130" height="114" rx="8" fill="#fff6fb"/>
+    <rect x="20" y="18" width="130" height="114" rx="8" fill="${C}" opacity=".1"/>
+    <rect x="16" y="116" width="138" height="16" rx="6" fill="#e7b27a"/>
+    <rect x="14" y="128" width="142" height="10" rx="5" fill="#c98c52"/>
+    <circle cx="120" cy="44" r="16" fill="#cdeeff" stroke="#fff" stroke-width="4"/>
+  </svg>`,
+
+  roof:(C)=>`<svg viewBox="0 0 240 130" width="240" height="130">
+    <path d="M120 10 L232 96 Q236 110 222 110 L18 110 Q4 110 8 96 Z" fill="${C}" stroke="#fff" stroke-width="6"/>
+    <circle cx="120" cy="78" r="20" fill="#fff" opacity=".8"/>
+    <rect x="100" y="100" width="40" height="20" fill="${C}"/>
+  </svg>`,
+
+  ears:(C)=>`<svg viewBox="0 0 220 120" width="220" height="120">
+    <path d="M20 110 L48 18 L96 100 Z" fill="${C}" stroke="#fff" stroke-width="6"/>
+    <path d="M124 100 L172 18 L200 110 Z" fill="${C}" stroke="#fff" stroke-width="6"/>
+    <path d="M40 92 L52 44 L74 88 Z" fill="#ffb3d9"/>
+    <path d="M146 88 L168 44 L180 92 Z" fill="#ffb3d9"/>
+  </svg>`,
+
+  catface:(C)=>`<svg viewBox="0 0 200 180" width="200" height="180">
+    <path d="M30 40 L52 6 L78 44 Z" fill="${C}" stroke="#fff" stroke-width="5"/>
+    <path d="M170 40 L148 6 L122 44 Z" fill="${C}" stroke="#fff" stroke-width="5"/>
+    <circle cx="100" cy="100" r="74" fill="${C}" stroke="#fff" stroke-width="6"/>
+    <circle cx="74" cy="92" r="11" fill="#3a2340"/><circle cx="71" cy="88" r="3.5" fill="#fff"/>
+    <circle cx="126" cy="92" r="11" fill="#3a2340"/><circle cx="123" cy="88" r="3.5" fill="#fff"/>
+    <path d="M92 112 Q100 122 108 112" fill="#ff8ec2" stroke="#3a2340" stroke-width="3" stroke-linecap="round"/>
+    <path d="M100 118 Q90 134 78 128 M100 118 Q110 134 122 128" stroke="#3a2340" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <g stroke="#3a2340" stroke-width="3" stroke-linecap="round">
+      <line x1="40" y1="98" x2="14" y2="92"/><line x1="40" y1="108" x2="14" y2="110"/>
+      <line x1="160" y1="98" x2="186" y2="92"/><line x1="160" y1="108" x2="186" y2="110"/>
+    </g>
+  </svg>`,
+
+  tail:(C)=>`<svg viewBox="0 0 130 190" width="130" height="190">
+    <path d="M64 184 C64 130 18 130 26 80 C32 40 78 32 96 56 C112 78 86 96 74 80 C66 70 84 60 92 70"
+      fill="none" stroke="${C}" stroke-width="26" stroke-linecap="round"/>
+  </svg>`,
+
+  /* ---- Furniture ---- */
+  table:(C)=>`<svg viewBox="0 0 130 100" width="130" height="100">
+    <rect x="12" y="28" width="106" height="18" rx="9" fill="${C}" stroke="#fff" stroke-width="4"/>
+    <rect x="22" y="44" width="12" height="48" rx="6" fill="#a86a3c"/>
+    <rect x="96" y="44" width="12" height="48" rx="6" fill="#a86a3c"/>
+  </svg>`,
+
+  chair:(C)=>`<svg viewBox="0 0 100 120" width="100" height="120">
+    <rect x="26" y="14" width="48" height="56" rx="12" fill="${C}" stroke="#fff" stroke-width="4"/>
+    <rect x="22" y="60" width="56" height="18" rx="9" fill="${C}" stroke="#fff" stroke-width="4"/>
+    <rect x="28" y="76" width="10" height="34" rx="5" fill="#a86a3c"/>
+    <rect x="62" y="76" width="10" height="34" rx="5" fill="#a86a3c"/>
+  </svg>`,
+
+  potty:(C)=>`<svg viewBox="0 0 110 120" width="110" height="120">
+    <ellipse cx="55" cy="40" rx="40" ry="22" fill="#fff" stroke="${C}" stroke-width="5"/>
+    <ellipse cx="55" cy="40" rx="24" ry="11" fill="#dff6ff"/>
+    <path d="M20 44 Q22 100 55 100 Q88 100 90 44" fill="#fff" stroke="${C}" stroke-width="5"/>
+    <rect x="74" y="6" width="20" height="44" rx="8" fill="${C}"/>
+  </svg>`,
+
+  tp:(C)=>`<svg viewBox="0 0 90 110" width="90" height="110">
+    <rect x="18" y="20" width="54" height="74" rx="14" fill="#fff" stroke="${C}" stroke-width="5"/>
+    <ellipse cx="45" cy="20" rx="27" ry="12" fill="${C}"/>
+    <ellipse cx="45" cy="20" rx="11" ry="5" fill="#fff"/>
+    <path d="M72 50 L84 50 L84 96 L72 90 Z" fill="#fff" stroke="${C}" stroke-width="4"/>
+  </svg>`,
+
+  slide:(C)=>`<svg viewBox="0 0 190 160" width="190" height="160">
+    <path d="M40 30 Q40 20 50 20 L70 20 Q80 20 80 30 L80 110 Q80 150 150 145"
+      fill="none" stroke="${C}" stroke-width="16" stroke-linecap="round"/>
+    <line x1="55" y1="30" x2="55" y2="150" stroke="#a86a3c" stroke-width="10" stroke-linecap="round"/>
+    <line x1="40" y1="56" x2="80" y2="56" stroke="#fff" stroke-width="6"/>
+    <line x1="40" y1="80" x2="80" y2="80" stroke="#fff" stroke-width="6"/>
+    <line x1="40" y1="104" x2="80" y2="104" stroke="#fff" stroke-width="6"/>
+  </svg>`,
+
+  bed:(C)=>`<svg viewBox="0 0 170 110" width="170" height="110">
+    <rect x="10" y="46" width="150" height="44" rx="12" fill="${C}" stroke="#fff" stroke-width="4"/>
+    <rect x="18" y="32" width="52" height="26" rx="10" fill="#fff"/>
+    <rect x="6" y="40" width="12" height="56" rx="6" fill="#a86a3c"/>
+    <rect x="152" y="40" width="12" height="56" rx="6" fill="#a86a3c"/>
+  </svg>`,
+
+  lamp:(C)=>`<svg viewBox="0 0 80 130" width="80" height="130">
+    <path d="M22 50 L58 50 L50 18 L30 18 Z" fill="${C}" stroke="#fff" stroke-width="4"/>
+    <rect x="36" y="50" width="8" height="58" fill="#a86a3c"/>
+    <ellipse cx="40" cy="112" rx="26" ry="8" fill="#a86a3c"/>
+  </svg>`,
+
+  rug:(C)=>`<svg viewBox="0 0 150 70" width="150" height="70">
+    <ellipse cx="75" cy="35" rx="68" ry="28" fill="${C}" stroke="#fff" stroke-width="5"/>
+    <ellipse cx="75" cy="35" rx="44" ry="16" fill="none" stroke="#fff" stroke-width="4" opacity=".7"/>
+  </svg>`,
+
+  plant:(C)=>`<svg viewBox="0 0 90 130" width="90" height="130">
+    <path d="M45 70 C20 60 18 20 40 14 C40 40 50 50 45 70" fill="${C}"/>
+    <path d="M45 70 C70 56 74 22 50 16 C52 42 42 52 45 70" fill="${C}" opacity=".85"/>
+    <path d="M28 78 L62 78 L56 116 L34 116 Z" fill="#ff994d" stroke="#fff" stroke-width="4"/>
+  </svg>`,
+};
+
+/* =========================================================================
+   CHARACTERS — fixed colors, drawn to match the design sketch.
+   ========================================================================= */
+const CHARS = {
+  gabby:()=>`<svg viewBox="0 0 120 150" width="120" height="150">
+    <path d="M28 26 L40 2 L56 28 Z M64 28 L80 2 L92 26 Z" fill="#ff5fa8"/>
+    <circle cx="60" cy="60" r="42" fill="#f6c89a"/>
+    <path d="M60 18 C24 18 16 56 24 84 C8 70 14 30 60 22 C106 30 112 70 96 84 C104 56 96 18 60 18Z" fill="#c46a2e"/>
+    <circle cx="20" cy="64" r="14" fill="#c46a2e"/><circle cx="100" cy="64" r="14" fill="#c46a2e"/>
+    <circle cx="46" cy="58" r="6" fill="#3a2340"/><circle cx="74" cy="58" r="6" fill="#3a2340"/>
+    <circle cx="36" cy="70" r="6" fill="#ff9ec4" opacity=".7"/><circle cx="84" cy="70" r="6" fill="#ff9ec4" opacity=".7"/>
+    <path d="M50 74 Q60 84 70 74" stroke="#3a2340" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <rect x="38" y="100" width="44" height="42" rx="14" fill="#9b5de5"/>
+  </svg>`,
+
+  pandy:()=>`<svg viewBox="0 0 120 150" width="120" height="150">
+    <path d="M22 40 L26 8 L52 30 Z M98 40 L94 8 L68 30 Z" fill="#fff" stroke="#e6dff0" stroke-width="3"/>
+    <path d="M24 32 L30 14 L44 28 Z M96 32 L90 14 L76 28 Z" fill="#222"/>
+    <circle cx="60" cy="64" r="46" fill="#fffaf2" stroke="#e6dff0" stroke-width="3"/>
+    <ellipse cx="42" cy="58" rx="13" ry="15" fill="#2a2a2a"/><ellipse cx="78" cy="58" rx="13" ry="15" fill="#2a2a2a"/>
+    <circle cx="44" cy="55" r="4" fill="#fff"/><circle cx="80" cy="55" r="4" fill="#fff"/>
+    <circle cx="32" cy="74" r="8" fill="#ff9ec4"/><circle cx="88" cy="74" r="8" fill="#ff9ec4"/>
+    <path d="M55 72 Q60 78 65 72" fill="#ff8ec2" stroke="#3a2340" stroke-width="2"/>
+    <path d="M60 76 Q52 88 44 82 M60 76 Q68 88 76 82" stroke="#3a2340" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <rect x="40" y="104" width="40" height="40" rx="14" fill="#fff" stroke="#e6dff0" stroke-width="3"/>
+  </svg>`,
+
+  mercat:()=>`<svg viewBox="0 0 120 150" width="120" height="150">
+    <path d="M26 34 L34 6 L56 30 Z M94 34 L86 6 L64 30 Z" fill="#6cc6ff"/>
+    <circle cx="60" cy="58" r="42" fill="#9bd9ff"/>
+    <path d="M30 26 Q60 6 90 26 Q78 18 60 18 Q42 18 30 26" fill="#3aa0e0"/>
+    <circle cx="46" cy="56" r="6" fill="#3a2340"/><circle cx="74" cy="56" r="6" fill="#3a2340"/>
+    <circle cx="36" cy="66" r="6" fill="#ff9ec4" opacity=".7"/><circle cx="84" cy="66" r="6" fill="#ff9ec4" opacity=".7"/>
+    <path d="M52 70 Q60 78 68 70" stroke="#3a2340" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M60 96 C40 104 40 130 60 138 C80 130 80 104 60 96Z" fill="#5fd6a6"/>
+    <path d="M44 130 Q60 150 76 130 L60 140 Z" fill="#3bbf8c"/>
+  </svg>`,
+
+  kittyfairy:()=>`<svg viewBox="0 0 120 150" width="120" height="150">
+    <line x1="44" y1="20" x2="38" y2="4" stroke="#5fd6a6" stroke-width="3"/><circle cx="37" cy="3" r="4" fill="#ffd23f"/>
+    <line x1="76" y1="20" x2="82" y2="4" stroke="#5fd6a6" stroke-width="3"/><circle cx="83" cy="3" r="4" fill="#ffd23f"/>
+    <path d="M30 36 L38 12 L58 32 Z M90 36 L82 12 L62 32 Z" fill="#5fd6a6"/>
+    <ellipse cx="22" cy="92" rx="20" ry="28" fill="#cdeaff" opacity=".8"/>
+    <ellipse cx="98" cy="92" rx="20" ry="28" fill="#cdeaff" opacity=".8"/>
+    <circle cx="60" cy="60" r="40" fill="#7be0b0"/>
+    <circle cx="47" cy="58" r="6" fill="#3a2340"/><circle cx="73" cy="58" r="6" fill="#3a2340"/>
+    <circle cx="37" cy="68" r="6" fill="#ff9ec4"/><circle cx="83" cy="68" r="6" fill="#ff9ec4"/>
+    <path d="M52 72 Q60 80 68 72" stroke="#3a2340" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <rect x="42" y="98" width="36" height="44" rx="16" fill="#ffd23f"/>
+  </svg>`,
+
+  djcatnip:()=>`<svg viewBox="0 0 120 150" width="120" height="150">
+    <path d="M26 36 L34 6 L58 32 Z M94 36 L86 6 L62 32 Z" fill="#ff3f9a" stroke="#fff" stroke-width="2"/>
+    <circle cx="60" cy="60" r="44" fill="#ff5fb0"/>
+    <path d="M16 50 a16 16 0 1 0 0 24 M104 50 a16 16 0 1 1 0 24" fill="none" stroke="#9b5de5" stroke-width="6"/>
+    <rect x="20" y="48" width="80" height="20" rx="10" fill="#9b5de5" opacity=".9"/>
+    <circle cx="46" cy="78" r="6" fill="#3a2340"/><circle cx="74" cy="78" r="6" fill="#3a2340"/>
+    <path d="M52 90 Q60 98 68 90" stroke="#3a2340" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="36" cy="86" r="6" fill="#ffd23f" opacity=".8"/><circle cx="84" cy="86" r="6" fill="#ffd23f" opacity=".8"/>
+  </svg>`,
+};
+
+/* =========================================================================
+   TRAYS per mode
+   ========================================================================= */
+const TRAYS = {
+  build:[
+    {type:'base',    name:'Bottom', tint:true},
+    {type:'room',    name:'Room',   tint:true},
+    {type:'roof',    name:'Top',    tint:true},
+    {type:'ears',    name:'Cat Ears',tint:true},
+    {type:'catface', name:'Cat Face',tint:true},
+    {type:'tail',    name:'Cat Tail',tint:true},
+  ],
+  decorate:[
+    {type:'table', name:'Table', tint:true},
+    {type:'chair', name:'Chair', tint:true},
+    {type:'bed',   name:'Bed',   tint:true},
+    {type:'potty', name:'Potty', tint:true},
+    {type:'tp',    name:'TP Roll',tint:true},
+    {type:'lamp',  name:'Lamp',  tint:true},
+    {type:'rug',   name:'Rug',   tint:true},
+    {type:'plant', name:'Plant', tint:true},
+    {type:'slide', name:'Slide', tint:true},
+  ],
+  play:[
+    {type:'gabby',     name:'Gabby',   char:true},
+    {type:'pandy',     name:'Pandy',   char:true},
+    {type:'mercat',    name:'MerCat',  char:true},
+    {type:'kittyfairy',name:'Kitty Fairy',char:true},
+    {type:'djcatnip',  name:'DJ Catnip',char:true},
+  ],
+};
+const TRAY_LABELS={build:'Tap a piece to build 🏠',decorate:'Add furniture 🛋️',play:'Add a kitty & drag to move! 🐾'};
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+let state = { items:[], color:COLORS[0], mode:'build', nextId:1 };
+let selectedColor = COLORS[0];
+let soundOn = true;
+let selectedId = null;
+const SAVE_KEY = 'gabbys-dollhouse-v1';
+
+/* Rooms & the base swap to an "open front" look outside Build mode. */
+function variant(type){
+  if(state.mode!=='build' && (type==='room'||type==='base')) return type+'_open';
+  return type;
+}
+function render(type,color,char){
+  if(char) return CHARS[type]();
+  return ART[variant(type)](color);
+}
+
+/* =========================================================================
+   CAMERA  (pan + zoom).  Everything draggable lives in #world;
+   screen = cam.{x,y} + world * cam.zoom    (transform-origin 0,0)
+   ========================================================================= */
+const cam = {x:0, y:0, zoom:1};
+const ZMIN=0.4, ZMAX=2.4;
+let animT=null;
+const clampZoom=z=>Math.max(ZMIN,Math.min(ZMAX,z));
+function applyCam(){ world.style.transform=`translate(${cam.x}px,${cam.y}px) scale(${cam.zoom})`; }
+function animateCamTo(z,x,y){
+  world.classList.add('anim'); cam.zoom=z; cam.x=x; cam.y=y; applyCam();
+  clearTimeout(animT); animT=setTimeout(()=>world.classList.remove('anim'),540);
+}
+function screenToWorld(sx,sy){ return {x:(sx-cam.x)/cam.zoom, y:(sy-cam.y)/cam.zoom}; }
+function viewCenterWorld(){ return screenToWorld(stage.clientWidth/2, stage.clientHeight/2); }
+function zoomBy(f){
+  const cx=stage.clientWidth/2, cy=stage.clientHeight/2;
+  const w=screenToWorld(cx,cy), z=clampZoom(cam.zoom*f);
+  animateCamTo(z, cx-w.x*z, cy-w.y*z);
+}
+function bboxOf(list){
+  if(!list.length) return null;
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  list.forEach(it=>{x0=Math.min(x0,it.x);y0=Math.min(y0,it.y);x1=Math.max(x1,it.x+it.w);y1=Math.max(y1,it.y+it.h);});
+  return {x:x0,y:y0,w:x1-x0,h:y1-y0};
+}
+function focusBox(bb,pad){
+  if(!bb){ resetCam(); return; }
+  const sw=stage.clientWidth, sh=stage.clientHeight;
+  const z=clampZoom(Math.min(sw/(bb.w+pad*2), sh/(bb.h+pad*2)));
+  const cxw=bb.x+bb.w/2, cyw=bb.y+bb.h/2;
+  animateCamTo(z, sw/2-cxw*z, sh/2-cyw*z);
+}
+/* Decorate: zoom into the open rooms + base (the part you furnish). */
+function focusInterior(){
+  const inner=state.items.filter(it=>it.type==='room'||it.type==='base');
+  focusBox(bboxOf(inner.length?inner:state.items.filter(it=>STRUCT.includes(it.type))), 46);
+}
+/* Play: frame the whole dollhouse + yard so the kitty can roam. */
+function focusHouse(){
+  const s=state.items.filter(it=>STRUCT.includes(it.type));
+  focusBox(bboxOf(s.length?s:state.items), 80);
+}
+function resetCam(){ animateCamTo(1,0,0); }
+
+/* ---------- Sound (tiny WebAudio pops) ---------- */
+let actx=null;
+function pop(freq=600,dur=.12,type='sine'){
+  if(!soundOn) return;
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type=type;o.frequency.value=freq;
+    o.connect(g);g.connect(actx.destination);
+    g.gain.setValueAtTime(.001,actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.25,actx.currentTime+.01);
+    g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+dur);
+    o.start();o.stop(actx.currentTime+dur);
+  }catch(e){}
+}
+
+/* ---------- Hint toast ---------- */
+let hintTimer=null;
+function hint(msg){
+  hintEl.textContent=msg;hintEl.style.opacity='1';
+  clearTimeout(hintTimer);
+  hintTimer=setTimeout(()=>hintEl.style.opacity='0',2200);
+}
+
+/* ---------- Sparkle effect ---------- */
+function sparkleAt(x,y){
+  for(let i=0;i<5;i++){
+    const s=document.createElement('div');
+    s.className='sparkle';s.textContent=['✨','💖','⭐','🌸'][i%4];
+    s.style.left=(x+ (Math.random()*40-20))+'px';
+    s.style.top =(y+ (Math.random()*30-15))+'px';
+    world.appendChild(s);
+    setTimeout(()=>s.remove(),700);
+  }
+}
+
+/* =========================================================================
+   ITEM creation / DOM
+   ========================================================================= */
+function makeEl(item){
+  const el=document.createElement('div');
+  el.className='piece';
+  el.dataset.id=item.id;
+  el.innerHTML=render(item.type,item.color,item.char);
+  (STRUCT.includes(item.type)?layStruct:layProps).appendChild(el);
+  item.el=el;
+  item.w=el.offsetWidth; item.h=el.offsetHeight;   // stable layout box (camera/scale independent)
+  positionEl(el,item);
+  return el;
+}
+function positionEl(el,item){
+  el.style.left=item.x+'px';
+  el.style.top =item.y+'px';
+  el.style.transform=`scale(${item.scale}) scaleX(${item.flip?-1:1})`;
+  el.style.transformOrigin='center center';
+}
+
+function addItem(def,cx,cy){
+  const id=state.nextId++;
+  const isStruct=STRUCT.includes(def.type);
+  const item={
+    id, type:def.type, char:!!def.char,
+    color: def.char?null:selectedColor,
+    scale: (def.char||isStruct)?1:0.55,   // furniture is small by default
+    flip:false, x:0, y:0, parent:null,
+  };
+  makeEl(item);
+  if(cx==null && isStruct){
+    placeStructure(item);                              // auto-stack into a house
+  } else {
+    const vc=viewCenterWorld();
+    item.x=(cx ?? vc.x) - item.w/2 + (cascade*26-52);
+    item.y=(cy ?? vc.y) - item.h/2 + (cascade*22-44);
+    cascade=(cascade+1)%5;
+  }
+  item.x=clampX(item.x,item.w); item.y=clampY(item.y,item.h);
+  positionEl(item.el,item);
+  state.items.push(item);
+  reparent(item);                          // attach furniture to whatever room it landed in
+  bringToFront(item);
+  if(item.char) item.el.classList.add('walk');
+  pop(item.char?740:520,.12,item.char?'triangle':'sine');
+  sparkleAt(item.x+item.w/2, item.y+item.h/2);
+  select(item.id);
+  save();
+}
+
+/* loose world-space clamp so nothing flies away (pan to retrieve anything) */
+function clampX(x,w){const W=stage.clientWidth; return Math.max(-w-260, Math.min(x, W+260));}
+function clampY(y,h){const H=stage.clientHeight; return Math.max(-h-200, Math.min(y, H+260));}
+
+function bringToFront(item){
+  const i=state.items.indexOf(item);
+  if(i>=0){state.items.splice(i,1);state.items.push(item);}
+  // re-append within its own layer → props always stay in front of structure
+  (STRUCT.includes(item.type)?layStruct:layProps).appendChild(item.el);
+}
+
+/* Structural pieces auto-stack into a centered house column. */
+const STRUCT=['base','room','roof','ears','catface'];
+const CONTAINERS=['room','base'];                  // open-front pieces furniture can live in
+let cascade=0;
+const isContainer=t=>CONTAINERS.includes(t);
+const attachable=it=>!it.char && !STRUCT.includes(it.type);   // furniture parents to rooms
+function childrenOf(id){ return state.items.filter(it=>it.parent===id); }
+/* frontmost room/base whose box contains the item's centre (or null) */
+function roomAt(item){
+  const cx=item.x+item.w/2, cy=item.y+item.h/2; let found=null;
+  state.items.forEach(o=>{ if(o!==item && isContainer(o.type)
+    && cx>=o.x && cx<=o.x+o.w && cy>=o.y && cy<=o.y+o.h) found=o; });
+  return found;
+}
+function reparent(item){ if(attachable(item)) item.parent = roomAt(item)?.id ?? null; }
+function placeStructure(item){
+  const others=state.items.filter(it=>it!==item && STRUCT.includes(it.type));
+  if(!others.length){                       // first piece: sit near the bottom so the house grows upward into view
+    const vc=viewCenterWorld();
+    item.x=vc.x-item.w/2;
+    item.y=screenToWorld(0, stage.clientHeight*0.84).y - item.h;
+    return;
+  }
+  let cxsum=0, minTop=Infinity, maxBot=-Infinity;
+  others.forEach(o=>{cxsum+=o.x+o.w/2; minTop=Math.min(minTop,o.y); maxBot=Math.max(maxBot,o.y+o.h);});
+  item.x = cxsum/others.length - item.w/2;
+  item.y = (item.type==='base') ? maxBot-14 : minTop-item.h+16;
+}
+
+/* Snap a dragged structural piece to the column & onto neighbours. */
+const SNAP=40;
+function snapStruct(item){
+  const others=state.items.filter(it=>it!==item && STRUCT.includes(it.type));
+  if(!others.length) return false;
+  let snapped=false, bestCx=null, dc=SNAP;
+  const c=item.x+item.w/2;
+  others.forEach(o=>{const oc=o.x+o.w/2, d=Math.abs(oc-c); if(d<dc){dc=d;bestCx=oc;}});
+  if(bestCx!=null){ item.x=bestCx-item.w/2; snapped=true; }
+  let bestY=null, dy=SNAP;
+  others.forEach(o=>{
+    const d1=Math.abs((item.y+item.h)-o.y); if(d1<dy){dy=d1;bestY=o.y-item.h;}   // sit on top of neighbour
+    const d2=Math.abs(item.y-(o.y+o.h));    if(d2<dy){dy=d2;bestY=o.y+o.h;}      // sit below neighbour
+  });
+  if(bestY!=null){ item.y=bestY; snapped=true; }
+  return snapped;
+}
+
+function findItem(id){return state.items.find(it=>it.id==id);}
+function removeItem(id){
+  const it=findItem(id);if(!it)return;
+  if(isContainer(it.type)) childrenOf(id).forEach(c=>c.parent=null);  // free its furniture
+  it.el.remove();
+  state.items=state.items.filter(x=>x.id!=id);
+  if(selectedId==id) select(null);
+  pop(220,.16,'sawtooth');
+  save();
+}
+
+/* =========================================================================
+   SELECTION + mini toolbar
+   ========================================================================= */
+function select(id){
+  selectedId=id;
+  document.querySelectorAll('.piece.selected').forEach(e=>e.classList.remove('selected'));
+  if(id==null){itemTools.style.display='none';return;}
+  const it=findItem(id);if(!it)return;
+  it.el.classList.add('selected');
+  positionTools(it);
+}
+function positionTools(it){
+  const r=it.el.getBoundingClientRect();
+  const sr=stage.getBoundingClientRect();
+  itemTools.style.display='flex';
+  let tx=r.left-sr.left + r.width/2 - 90; // 4 buttons ~ 184 wide
+  let ty=r.top-sr.top - 50;
+  if(ty<4) ty=r.bottom-sr.top+8;
+  tx=Math.max(4,Math.min(tx, stage.clientWidth-188));
+  itemTools.style.left=tx+'px';
+  itemTools.style.top=ty+'px';
+}
+
+/* =========================================================================
+   DRAGGING (pointer events: mouse + touch + pen)
+   ========================================================================= */
+const pointers=new Map();      // id -> {x,y} in stage-local coords
+let gesture=null;              // 'drag' | 'pan' | 'pinch'
+let drag=null, pan=null, pinch=null;
+
+function localXY(e){const sr=stage.getBoundingClientRect();return {x:e.clientX-sr.left, y:e.clientY-sr.top};}
+function endDrag(removeIfTrash){
+  if(!drag) return;
+  drag.it.el.classList.remove('dragging');
+  trash.classList.remove('hot');
+  if(removeIfTrash) removeItem(drag.it.id);
+  else { reparent(drag.it); positionTools(drag.it); save(); }   // re-attach furniture to its room
+  drag=null;
+}
+
+stage.addEventListener('pointerdown',e=>{
+  world.classList.remove('anim'); clearTimeout(animT);   // cancel any camera fly-in
+  const p=localXY(e);
+  pointers.set(e.pointerId,p);
+  try{ stage.setPointerCapture(e.pointerId); }catch(_){}
+
+  if(pointers.size>=2){                       // ---- start / continue PINCH ----
+    endDrag(false); pan=null;
+    const pts=[...pointers.values()];
+    const mid={x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2};
+    const dist=Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y)||1;
+    pinch={ dist, anchor:screenToWorld(mid.x,mid.y) };
+    gesture='pinch';
+    itemTools.style.display='none';
+    return;
+  }
+
+  const pe=e.target.closest('.piece');
+  if(pe){                                      // ---- start DRAG ----
+    const it=findItem(pe.dataset.id); if(!it) return;
+    bringToFront(it); select(it.id);
+    const w=screenToWorld(p.x,p.y);
+    drag={ it, dx:w.x-it.x, dy:w.y-it.y, moved:false };
+    gesture='drag';
+    it.el.classList.add('dragging');
+    itemTools.style.display='none';
+  } else {                                     // ---- start PAN ----
+    select(null);
+    pan={ sx:p.x, sy:p.y, camX:cam.x, camY:cam.y };
+    gesture='pan';
+  }
+});
+
+stage.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId)) return;
+  const p=localXY(e); pointers.set(e.pointerId,p);
+
+  if(gesture==='pinch' && pointers.size>=2){
+    const pts=[...pointers.values()];
+    const mid={x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2};
+    const dist=Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y)||1;
+    cam.zoom=clampZoom(cam.zoom*(dist/pinch.dist));
+    pinch.dist=dist;
+    cam.x=mid.x-pinch.anchor.x*cam.zoom;
+    cam.y=mid.y-pinch.anchor.y*cam.zoom;
+    applyCam();
+    return;
+  }
+  if(gesture==='drag' && drag){
+    const ox=drag.it.x, oy=drag.it.y;
+    const w=screenToWorld(p.x,p.y);
+    drag.it.x=w.x-drag.dx; drag.it.y=w.y-drag.dy;
+    if(STRUCT.includes(drag.it.type)) snapStruct(drag.it);
+    if(isContainer(drag.it.type)){                       // carry attached furniture along
+      const ddx=drag.it.x-ox, ddy=drag.it.y-oy;
+      childrenOf(drag.it.id).forEach(c=>{c.x+=ddx;c.y+=ddy;positionEl(c.el,c);});
+    }
+    positionEl(drag.it.el,drag.it);
+    drag.moved=true;
+    const tr=trash.getBoundingClientRect();
+    const over=e.clientX>tr.left&&e.clientX<tr.right&&e.clientY>tr.top&&e.clientY<tr.bottom;
+    trash.classList.toggle('hot',over);
+    return;
+  }
+  if(gesture==='pan' && pan){
+    cam.x=pan.camX+(p.x-pan.sx); cam.y=pan.camY+(p.y-pan.sy); applyCam();
+  }
+});
+
+function pointerEnd(e){
+  const wasTrash=(()=>{ if(gesture!=='drag'||!drag) return false;
+    const tr=trash.getBoundingClientRect();
+    return e.clientX>tr.left&&e.clientX<tr.right&&e.clientY>tr.top&&e.clientY<tr.bottom; })();
+  pointers.delete(e.pointerId);
+  if(gesture==='drag'){ endDrag(wasTrash); }
+  else if(gesture==='pan'){ pan=null; }
+  else if(gesture==='pinch' && pointers.size<2){ pinch=null; }
+  if(pointers.size===0) gesture=null;
+  else if(pointers.size===1 && gesture==='pinch'){   // dropped to one finger -> pan from it
+    const p=[...pointers.values()][0]; pan={sx:p.x,sy:p.y,camX:cam.x,camY:cam.y}; gesture='pan'; pinch=null;
+  }
+}
+stage.addEventListener('pointerup',pointerEnd);
+stage.addEventListener('pointercancel',pointerEnd);
+
+/* =========================================================================
+   Item toolbar buttons
+   ========================================================================= */
+document.getElementById('growBtn').onclick=()=>scaleSel(1.18);
+document.getElementById('shrinkBtn').onclick=()=>scaleSel(1/1.18);
+document.getElementById('flipBtn').onclick=()=>{const it=findItem(selectedId);if(!it)return;it.flip=!it.flip;positionEl(it.el,it);pop(500);save();};
+document.getElementById('delBtn').onclick=()=>{if(selectedId!=null)removeItem(selectedId);};
+function scaleSel(f){
+  const it=findItem(selectedId);if(!it)return;
+  it.scale=Math.max(.4,Math.min(2.6,it.scale*f));
+  positionEl(it.el,it);positionTools(it);pop(600);save();
+}
+
+/* =========================================================================
+   TRAY + swatches rendering
+   ========================================================================= */
+function buildSwatches(){
+  swatches.innerHTML='';
+  COLORS.forEach(c=>{
+    const s=document.createElement('div');
+    s.className='swatch'+(c===selectedColor?' active':'');
+    s.style.background=c;
+    s.onclick=()=>{ selectedColor=c; buildSwatches();
+      // recolor selected structure/furniture item if it's tintable
+      const it=findItem(selectedId);
+      if(it && !it.char){ it.color=c; it.el.innerHTML=render(it.type,c,false); positionEl(it.el,it); save(); }
+      pop(680,.08);
+    };
+    swatches.appendChild(s);
+  });
+}
+function buildStamps(){
+  stamps.innerHTML='';
+  TRAYS[state.mode].forEach(def=>{
+    const b=document.createElement('div');
+    b.className='stamp';
+    const col = def.char? null : selectedColor;
+    b.innerHTML=render(def.type,col,def.char)+`<div class="nm">${def.name}</div>`;
+    b.onclick=()=>addItem(def);
+    stamps.appendChild(b);
+  });
+}
+function refreshTray(){
+  document.getElementById('trayLabel').textContent=TRAY_LABELS[state.mode];
+  swatches.style.display = (state.mode==='play')?'none':'flex';
+  buildSwatches();
+  buildStamps();
+}
+
+/* Re-render structural pieces so room/base swap between closed & open-front. */
+function rerenderStructure(){
+  state.items.forEach(it=>{
+    if(it.char) return;
+    if(it.type==='room'||it.type==='base'){ it.el.innerHTML=render(it.type,it.color,false); }
+  });
+}
+
+/* ---------- Mode tabs ---------- */
+function setMode(mode){
+  state.mode=mode;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));
+  refreshTray();
+  select(null);
+  rerenderStructure();                       // open / close the front walls
+  if(mode==='build'){ resetCam(); hint('Stack pieces — they snap together into a house! 🏠'); }
+  else if(mode==='decorate'){ focusInterior(); hint('Peek inside! Drag furniture into the open rooms 🛋️'); }
+  else { focusHouse(); hint('Tap a kitty, then drag them around the house! 🐾'); }
+  pop(700,.1);
+  save();
+}
+document.querySelectorAll('.tab').forEach(t=>{ t.onclick=()=>setMode(t.dataset.mode); });
+
+/* ---------- Zoom controls ---------- */
+document.getElementById('zoomIn').onclick =()=>{ zoomBy(1.3); pop(720,.07); };
+document.getElementById('zoomOut').onclick=()=>{ zoomBy(1/1.3); pop(520,.07); };
+document.getElementById('zoomFit').onclick=()=>{
+  if(state.mode==='build') resetCam(); else if(state.mode==='decorate') focusInterior(); else focusHouse();
+  pop(640,.08);
+};
+
+/* ---------- Top buttons ---------- */
+document.getElementById('soundBtn').onclick=function(){
+  soundOn=!soundOn; this.textContent=soundOn?'🔊':'🔇'; if(soundOn)pop(800);
+};
+document.getElementById('clearBtn').onclick=()=>{
+  if(state.items.length && !confirm('Clear everything and start a new dollhouse?')) return;
+  state.items.forEach(it=>it.el.remove());
+  state.items=[]; select(null); save(); pop(300,.2,'sawtooth');
+  hint('Fresh start! Build a new dollhouse ✨');
+};
+
+/* =========================================================================
+   SAVE / LOAD (localStorage)
+   ========================================================================= */
+function save(){
+  try{
+    const data={mode:state.mode,color:selectedColor,nextId:state.nextId,
+      items:state.items.map(it=>({id:it.id,type:it.type,char:it.char,color:it.color,scale:it.scale,flip:it.flip,x:it.x,y:it.y,parent:it.parent??null}))};
+    localStorage.setItem(SAVE_KEY,JSON.stringify(data));
+  }catch(e){}
+}
+function load(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY); if(!raw) return false;
+    const data=JSON.parse(raw);
+    selectedColor=data.color||COLORS[0];
+    state.nextId=data.nextId||1;
+    state.items=[];
+    (data.items||[]).forEach(d=>{
+      const item={...d,el:null}; makeEl(item);
+      if(item.char) item.el.classList.add('walk');
+      state.items.push(item);
+    });
+    return state.items.length>0;
+  }catch(e){return false;}
+}
+
+/* =========================================================================
+   INTRO
+   ========================================================================= */
+const introCats=document.getElementById('introCats');
+['gabby','pandy','mercat','kittyfairy','djcatnip'].forEach(k=>{
+  const d=document.createElement('div');d.innerHTML=CHARS[k]();introCats.appendChild(d.firstChild);
+});
+document.getElementById('startBtn').onclick=()=>{
+  document.getElementById('intro').style.display='none';
+  pop(880,.15,'triangle');setTimeout(()=>pop(1100,.15,'triangle'),120);
+  hint('Stack pieces to build your dollhouse! 🏠');
+};
+
+/* ---------- clouds ---------- */
+['☁️','☁️','🌸'].forEach((c,i)=>{
+  const el=document.createElement('div');el.className='cloud';el.textContent=c;
+  el.style.top=(8+i*12)+'%';el.style.animationDelay=(-i*9)+'s';el.style.animationDuration=(22+i*6)+'s';
+  stage.appendChild(el);
+});
+
+/* ---------- keep toolbar glued while window resizes ---------- */
+window.addEventListener('resize',()=>{const it=findItem(selectedId);if(it)positionTools(it);});
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+load();
+refreshTray();
+applyCam();            // start zoomed-out in Build mode (house closed)
+</script>
+</body>
+</html>
