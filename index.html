@@ -84,10 +84,12 @@
   .piece{position:absolute;pointer-events:auto;touch-action:none;cursor:grab;will-change:transform,left,top;
     filter:drop-shadow(0 5px 6px rgba(80,30,90,.28));transition:filter .15s;}
   .piece svg{display:block;pointer-events:none;}
+  .cwrap{display:block;}
   .piece.dragging{cursor:grabbing;filter:drop-shadow(0 14px 14px rgba(80,30,90,.4));z-index:99;}
   .piece.selected{outline:3px dashed rgba(255,95,168,.9);outline-offset:4px;border-radius:14px;}
-  .piece.walk{animation:walk .5s ease-in-out infinite;}
-  @keyframes walk{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
+  /* bob lives on the inner wrapper so it composes with the .piece scale/flip transform */
+  .piece.walk .cwrap{animation:walk .42s ease-in-out infinite;}
+  @keyframes walk{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-5px) rotate(3deg)}}
 
   /* ===== Selected-item mini toolbar ===== */
   #itemTools{position:absolute;display:none;gap:6px;z-index:120;}
@@ -542,7 +544,8 @@ function makeEl(item){
   const el=document.createElement('div');
   el.className='piece';
   el.dataset.id=item.id;
-  el.innerHTML=render(item.type,item.color,item.char);
+  el.innerHTML = item.char ? `<div class="cwrap">${render(item.type,null,true)}</div>`
+                           : render(item.type,item.color,false);
   (STRUCT.includes(item.type)?layStruct:layProps).appendChild(el);
   item.el=el;
   item.w=el.offsetWidth; item.h=el.offsetHeight;   // stable layout box (camera/scale independent)
@@ -562,7 +565,7 @@ function addItem(def,cx,cy){
   const item={
     id, type:def.type, char:!!def.char,
     color: def.char?null:selectedColor,
-    scale: (def.char||isStruct)?1:0.55,   // furniture is small by default
+    scale: isStruct?1 : (def.char?0.6:0.55),   // characters & furniture are small by default
     flip:false, x:0, y:0, parent:null,
   };
   makeEl(item);
@@ -578,11 +581,12 @@ function addItem(def,cx,cy){
   positionEl(item.el,item);
   state.items.push(item);
   reparent(item);                          // attach furniture to whatever room it landed in
+  if(item.char) item.room = roomAt(item)?.id ?? null;   // remember which room the kitty is in
   bringToFront(item);
-  if(item.char) item.el.classList.add('walk');
   pop(item.char?740:520,.12,item.char?'triangle':'sine');
   sparkleAt(item.x+item.w/2, item.y+item.h/2);
-  select(item.id);
+  // in Play, leave new kitties unselected so they start wandering right away
+  if(item.char && state.mode==='play') select(null); else select(item.id);
   save();
 }
 
@@ -688,10 +692,16 @@ let drag=null, pan=null, pinch=null;
 function localXY(e){const sr=stage.getBoundingClientRect();return {x:e.clientX-sr.left, y:e.clientY-sr.top};}
 function endDrag(removeIfTrash){
   if(!drag) return;
-  drag.it.el.classList.remove('dragging');
+  const it=drag.it;
+  it.el.classList.remove('dragging');
   trash.classList.remove('hot');
-  if(removeIfTrash) removeItem(drag.it.id);
-  else { reparent(drag.it); positionTools(drag.it); save(); }   // re-attach furniture to its room
+  if(removeIfTrash){ removeItem(it.id); drag=null; return; }
+  reparent(it);                                       // re-attach furniture to its room
+  if(it.char){                                        // kitty: remember new room, head off wandering again
+    it.room=roomAt(it)?.id ?? null; it.wx=undefined; it.pause=350;
+    if(state.mode==='play' && drag.moved){ select(null); drag=null; save(); return; }
+  }
+  positionTools(it); save();
   drag=null;
 }
 
@@ -890,7 +900,6 @@ function load(){
     state.items=[];
     (data.items||[]).forEach(d=>{
       const item={...d,el:null}; makeEl(item);
-      if(item.char) item.el.classList.add('walk');
       state.items.push(item);
     });
     return state.items.length>0;
@@ -916,6 +925,53 @@ document.getElementById('startBtn').onclick=()=>{
   el.style.top=(8+i*12)+'%';el.style.animationDelay=(-i*9)+'s';el.style.animationDuration=(22+i*6)+'s';
   stage.appendChild(el);
 });
+
+/* =========================================================================
+   CHARACTER AI — kitties wander their room and change rooms now and then.
+   Runs only in Play mode; pauses while a kitty is grabbed or selected.
+   ========================================================================= */
+const WANDER={ speed:0.07, pad:16, arrive:5 };   // speed in world-px per ms
+function pickTarget(it){
+  const rooms=state.items.filter(o=>isContainer(o.type));
+  if(rooms.length){
+    let room = rooms.find(r=>r.id===it.room) || roomAt(it) || rooms[(Math.random()*rooms.length)|0];
+    if(rooms.length>1 && Math.random()<0.3){                 // occasionally move to a different room
+      let other; do{ other=rooms[(Math.random()*rooms.length)|0]; }while(other===room);
+      room=other;
+    }
+    it.room=room.id;
+    const hw=it.w*it.scale/2, hh=it.h*it.scale/2;
+    const minx=room.x+WANDER.pad+hw, maxx=room.x+room.w-WANDER.pad-hw;
+    it.wx = maxx>minx ? minx+Math.random()*(maxx-minx) : room.x+room.w/2;
+    const floor=room.y+room.h-WANDER.pad-hh;                  // stand near the floor
+    it.wy = floor - Math.random()*Math.min(34, room.h*0.2);
+  } else {                                                    // no rooms yet: roam the visible yard
+    const a=screenToWorld(70,70), b=screenToWorld(stage.clientWidth-70, stage.clientHeight-70);
+    it.wx=a.x+Math.random()*(b.x-a.x); it.wy=a.y+Math.random()*(b.y-a.y);
+  }
+}
+function stepChar(it,dt){
+  if((drag&&drag.it===it) || selectedId===it.id){ it.el.classList.remove('walk'); return; }
+  if(it.pause>0){ it.pause-=dt; it.el.classList.remove('walk'); return; }
+  if(it.wx===undefined){ pickTarget(it); }
+  const cx=it.x+it.w/2, cy=it.y+it.h/2;
+  const dx=it.wx-cx, dy=it.wy-cy, dist=Math.hypot(dx,dy);
+  if(dist<=WANDER.arrive){                                    // arrived → rest, then choose a new spot
+    it.pause=500+Math.random()*1500; it.wx=undefined; it.el.classList.remove('walk'); save(); return;
+  }
+  const stp=Math.min(dist, WANDER.speed*dt);
+  it.x=cx+dx/dist*stp - it.w/2;
+  it.y=cy+dy/dist*stp - it.h/2;
+  positionEl(it.el,it);
+  it.el.classList.add('walk');
+}
+let _lastT=0;
+function tick(t){
+  const dt=Math.min(48, _lastT? t-_lastT : 16); _lastT=t;
+  if(state.mode==='play') state.items.forEach(it=>{ if(it.char) stepChar(it,dt); });
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
 
 /* ---------- keep toolbar glued while window resizes ---------- */
 window.addEventListener('resize',()=>{const it=findItem(selectedId);if(it)positionTools(it);});
